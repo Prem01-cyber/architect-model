@@ -54,10 +54,15 @@ def load_model(model_name: str, cfg: dict) -> AutoModelForCausalLM:
         bnb_4bit_use_double_quant=True,  # nested quantisation saves ~0.4 bits/param
     )
 
+    # In DDP each process owns one GPU — map model to that GPU only.
+    # device_map="auto" shards across all GPUs which conflicts with DDP.
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    device_map = {"": local_rank}
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
-        device_map="auto",
+        device_map=device_map,
         trust_remote_code=True,
         attn_implementation=cfg.get("attn_implementation", "eager"),
         dtype=torch.bfloat16,
