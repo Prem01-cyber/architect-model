@@ -1,0 +1,83 @@
+model:
+  base_model: "Qwen/Qwen2.5-Coder-7B-Instruct"
+  # alternatives: "meta-llama/Llama-3.1-8B-Instruct", "deepseek-ai/deepseek-coder-7b-instruct-v1.5"
+  torch_dtype: "bfloat16"
+  attn_implementation: "eager" # set to "flash_attention_2" if flash_attn is installed
+
+lora:
+  r: 16 # rank — increase to 32 for more capacity
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  train_path: "data/augmented/train.jsonl"
+  val_path: "data/augmented/val.jsonl"
+  max_seq_length: 1024
+  val_split: 0.05
+
+training:
+  output_dir: "outputs/"
+  num_train_epochs: 3
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16 # effective batch = 16
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  logging_steps: 10
+  eval_strategy: "steps"
+  eval_steps: 100
+  save_strategy: "steps"
+  save_steps: 200
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  report_to: "none" # set to "wandb" if you want experiment tracking
+  dataloader_num_workers: 4
+  seed: 42
+
+collection:
+  min_stars: 100
+  max_repos_per_cell: 200
+  max_files_per_repo: 1500
+  max_depth: 4
+  noise_dirs:
+    - ".github"
+    - "node_modules"
+    - "__pycache__"
+    - ".git"
+    - "dist"
+    - "build"
+    - ".next"
+    - "vendor"
+    - "third_party"
+    - "external"
+    - ".cache"
+  noise_extensions:
+    - ".lock"
+    - ".min.js"
+    - ".min.css"
+    - ".map"
+    - ".pyc"
+    - ".o"
+    - ".a"
+    - ".so"
+
+augmentation:
+  rewrites_per_example: 5
+  use_openai: true # set false to skip synthetic reasoning
+  openai_model: "gpt-4o-mini" # cheap + fast for augmentation

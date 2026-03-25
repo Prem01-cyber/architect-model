@@ -1,0 +1,39 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+
+# Data (large files — don't commit)
+data/raw/
+data/processed/
+data/augmented/
+
+# Model weights & outputs
+outputs/
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+
+# HuggingFace cache
+hf_cache/
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
