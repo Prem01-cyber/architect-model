@@ -4,7 +4,7 @@ model.py
 Inference wrapper for the fine-tuned architect model.
 
 Key features:
-  - Grammar-constrained decoding via lm-format-enforcer
+  - Grammar-constrained decoding via outlines (JSONLogitsProcessor)
     → model physically cannot produce invalid JSON
   - temperature=0.1 for near-deterministic output
   - Pydantic schema validation on the output
@@ -165,7 +165,7 @@ class ArchitectModel:
         )
         self.model.eval()
 
-        self._prefix_fn = None
+        self._generator = None
         if use_constrained_decoding:
             self._setup_constrained_decoding()
 
@@ -182,29 +182,35 @@ class ArchitectModel:
         Returns a validated ArchitectOutput or None if generation failed.
         """
         prompt = self._build_prompt(goal, scale, constraints or [])
+
+        if self._generator is not None:
+            try:
+                result = self._generator(
+                    prompt,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    do_sample=temperature > 0,
+                    repetition_penalty=1.1,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                )
+                return ArchitectOutput(**result)
+            except Exception as e:
+                logger.warning(f"Constrained generation failed: {e}")
+                return None
+
+        # Unconstrained fallback
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-
-        generate_kwargs: dict = {
-            "max_new_tokens": max_new_tokens,
-            "temperature": temperature,
-            "do_sample": temperature > 0,
-            "repetition_penalty": 1.1,
-            "pad_token_id": self.tokenizer.eos_token_id,
-        }
-
-        if self._prefix_fn:
-            generate_kwargs["prefix_allowed_tokens_fn"] = self._prefix_fn
-
         with torch.no_grad():
             output_ids = self.model.generate(
                 **inputs,
-                **generate_kwargs,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                do_sample=temperature > 0,
+                repetition_penalty=1.1,
+                pad_token_id=self.tokenizer.eos_token_id,
             )
-
-        # Decode only the newly generated tokens
         new_ids = output_ids[0][inputs["input_ids"].shape[1] :]
         raw_text = self.tokenizer.decode(new_ids, skip_special_tokens=True)
-
         return self._parse_and_validate(raw_text)
 
     # ── private ───────────────────────────────────────────────────────────────
@@ -244,20 +250,18 @@ class ArchitectModel:
 
     def _setup_constrained_decoding(self) -> None:
         try:
-            from lm_format_enforcer import JsonSchemaParser
-            from lm_format_enforcer.integrations.transformers import (
-                build_transformers_prefix_allowed_tokens_fn,
-            )
+            import outlines
 
-            parser = JsonSchemaParser(ARCHITECT_JSON_SCHEMA)
-            self._prefix_fn = build_transformers_prefix_allowed_tokens_fn(
-                self.tokenizer, parser
+            outline_model = outlines.from_transformers(self.model, self.tokenizer)
+            self._generator = outlines.Generator(
+                outline_model,
+                output_type=outlines.json_schema(ARCHITECT_JSON_SCHEMA),
             )
-            logger.info("Constrained decoding enabled")
-        except ImportError:
+            logger.info("Constrained decoding enabled (outlines)")
+        except Exception as e:
             logger.warning(
-                "lm-format-enforcer not installed — falling back to unconstrained decoding. "
-                "Install with: pip install lm-format-enforcer"
+                f"outlines setup failed ({e}) — falling back to unconstrained decoding. "
+                "Install with: pip install outlines"
             )
 
     def _parse_and_validate(self, raw_text: str) -> Optional[ArchitectOutput]:
