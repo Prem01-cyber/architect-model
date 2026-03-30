@@ -26,7 +26,7 @@ architect-model/
 │   ├── model.py                 # inference wrapper with constrained decoding
 │   └── schema.py                # pydantic output schemas
 ├── evaluation/
-│   └── evaluator.py             # structure validity + consistency metrics
+│   └── evealuator.py             # structure validity + consistency metrics
 └── scripts/
     ├── 01_collect.py            # run data collection
     ├── 02_process.py            # run normalization + pair building

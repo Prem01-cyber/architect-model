@@ -106,7 +106,8 @@ def main():
         "--scale", default="basic", choices=["basic", "intermediate", "production"]
     )
     parser.add_argument(
-        "--no-constrained", action="store_true", help="Disable constrained decoding"
+        "--quantize", default="4bit", choices=["4bit", "8bit", "none"],
+        help="Quantization mode (default: 4bit)"
     )
     parser.add_argument("--save-eval", default="outputs/eval_results.json")
     args = parser.parse_args()
@@ -114,7 +115,7 @@ def main():
     logger.info(f"Loading model from {args.model}")
     model = ArchitectModel(
         model_path=args.model,
-        use_constrained_decoding=not args.no_constrained,
+        quantize=None if args.quantize == "none" else args.quantize,
     )
 
     # ── Single goal mode ──────────────────────────────────────────────────────
