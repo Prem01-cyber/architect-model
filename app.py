@@ -12,6 +12,7 @@ import argparse
 import sys
 import json
 from pathlib import Path
+from collections import defaultdict
 
 import streamlit as st
 
@@ -30,6 +31,61 @@ def _parse_args():
     except ValueError:
         args, _ = parser.parse_known_args()
     return args
+
+
+# ── File tree renderer ────────────────────────────────────────────────────────
+
+def _build_file_tree(structure: dict) -> str:
+    """
+    Convert flat {dir_path: [files]} into an ASCII tree string.
+
+    Example output:
+      .
+      ├── README.md
+      ├── go.mod
+      └── src/
+          ├── main.go
+          └── handlers/
+              └── user.go
+    """
+    # Build a nested dict: dict value = subdirectory, None value = file
+    root: dict = {}
+    for dir_path, files in structure.items():
+        node = root
+        if dir_path != ".":
+            for part in dir_path.split("/"):
+                if part not in node or node[part] is None:
+                    node[part] = {}
+                node = node[part]
+        for f in sorted(files):
+            node.setdefault(f, None)
+
+    lines: list[str] = ["."]
+
+    def _render(node: dict, prefix: str) -> None:
+        dirs  = sorted((k, v) for k, v in node.items() if isinstance(v, dict))
+        files = sorted((k, v) for k, v in node.items() if v is None)
+        children = dirs + files
+        for i, (name, child) in enumerate(children):
+            is_last   = i == len(children) - 1
+            connector = "└── " if is_last else "├── "
+            extension = "    " if is_last else "│   "
+            if isinstance(child, dict):
+                lines.append(f"{prefix}{connector}{name}/")
+                _render(child, prefix + extension)
+            else:
+                lines.append(f"{prefix}{connector}{name}")
+
+    _render(root, "")
+    return "\n".join(lines)
+
+
+def _tree_stats(structure: dict) -> tuple[int, int, int]:
+    """Return (total_files, total_dirs, max_depth)."""
+    total_files = sum(len(v) for v in structure.values())
+    total_dirs  = sum(1 for k in structure if k != ".")
+    max_depth   = max((k.count("/") + 1 for k in structure if k != "."), default=0)
+    return total_files, total_dirs, max_depth
 
 
 cli = _parse_args()
@@ -73,8 +129,14 @@ with st.sidebar:
         help="Higher = more varied output.",
     )
 
+    token_defaults = {"basic": 1200, "intermediate": 2000, "production": 3200}
     max_new_tokens = st.slider(
-        "Max new tokens", min_value=256, max_value=2048, value=1200, step=64,
+        "Max new tokens",
+        min_value=256,
+        max_value=4096,
+        value=token_defaults[scale],
+        step=64,
+        help="Auto-set per scale; override if needed.",
     )
 
     constraints_raw = st.text_area(
@@ -146,33 +208,27 @@ if run and goal.strip():
 
     st.subheader("File Structure")
 
-    meta_col, tree_col = st.columns([1, 2], gap="large")
+    total_files, total_dirs, max_depth = _tree_stats(struct.structure)
 
-    with meta_col:
-        st.markdown(f"**Language:** `{struct.language}`")
-        st.markdown(f"**Fingerprint:** `{output.fingerprint()}`")
-        if struct.reference_projects:
-            st.markdown("**Reference projects:**")
-            for proj in struct.reference_projects:
-                st.markdown(f"- `{proj}`")
+    stat_cols = st.columns(4)
+    stat_cols[0].metric("Language", struct.language)
+    stat_cols[1].metric("Files", total_files)
+    stat_cols[2].metric("Directories", total_dirs)
+    stat_cols[3].metric("Max depth", max_depth)
+
+    tree_col, meta_col = st.columns([3, 1], gap="large")
 
     with tree_col:
-        # Build a nested dict for display
-        lines = []
-        for dir_path in sorted(struct.structure.keys()):
-            if dir_path == ".":
-                label = "."
-                indent = ""
-            else:
-                depth = dir_path.count("/")
-                indent = "  " * depth
-                label = dir_path.split("/")[-1] + "/"
-            lines.append(f"{indent}📁 **{label}**")
-            for fname in struct.structure[dir_path]:
-                file_indent = indent + "  "
-                lines.append(f"{file_indent}📄 `{fname}`")
+        st.code(_build_file_tree(struct.structure), language="text")
 
-        st.markdown("\n\n".join(lines))
+    with meta_col:
+        st.markdown("**Fingerprint**")
+        st.code(output.fingerprint(), language="text")
+
+        if struct.reference_projects:
+            st.markdown("**Reference projects**")
+            for proj in struct.reference_projects:
+                st.markdown(f"- `{proj}`")
 
     # ── Raw JSON ──────────────────────────────────────────────────────────────
 
