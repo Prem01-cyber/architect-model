@@ -1,6 +1,6 @@
 model:
-  base_model: "Qwen/Qwen2.5-Coder-7B-Instruct"
-  # alternatives: "meta-llama/Llama-3.1-8B-Instruct", "deepseek-ai/deepseek-coder-7b-instruct-v1.5"
+  base_model: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  # alternatives: "Qwen/Qwen2.5-Coder-7B-Instruct", "Qwen/Qwen2.5-Coder-0.5B-Instruct", "meta-llama/Llama-3.1-8B-Instruct", "deepseek-ai/deepseek-coder-7b-instruct-v1.5"
   torch_dtype: "bfloat16"
   attn_implementation: "eager" # set to "flash_attention_2" if flash_attn is installed
 
@@ -26,7 +26,7 @@ data:
   val_split: 0.05
 
 training:
-  output_dir: "outputs/"
+  output_dir: "outputs-qwen1.5b/"
   num_train_epochs: 3
   per_device_train_batch_size: 1
   per_device_eval_batch_size: 1
